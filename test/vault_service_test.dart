@@ -206,6 +206,61 @@ void main() {
     expect(service.hasUnpushedChanges, isFalse);
   });
 
+  group('joining from another device', () {
+    /// A device with empty local storage, pointed at the same repo.
+    VaultService freshDevice() => VaultService(
+      blobStore: MemoryVaultBlobStore(),
+      remote: GithubVaultStore(client: github.client),
+    );
+
+    test('restores the existing vault with the same passphrase', () async {
+      await service.unlock(passphrase);
+      await service.upsertHost(
+        SshHost.create(hostname: 'example.com', username: 'ben'),
+      );
+      await service.sync(location: location);
+
+      final joined = freshDevice();
+      final restored = await joined.restoreFromRemote(location, passphrase);
+
+      expect(restored.hosts.single.hostname, 'example.com');
+      expect(joined.isUnlocked, isTrue);
+      // Nothing local to push: it is in step with the remote already.
+      expect(joined.hasUnpushedChanges, isFalse);
+      expect(await joined.sync(location: location), SyncOutcome.upToDate);
+    });
+
+    test('rejects a different passphrase', () async {
+      await service.unlock(passphrase);
+      await service.sync(location: location);
+
+      await expectLater(
+        freshDevice().restoreFromRemote(location, 'a different passphrase'),
+        throwsA(isA<WrongVaultPassphrase>()),
+      );
+    });
+
+    test('reports an empty repository distinctly', () async {
+      await expectLater(
+        freshDevice().restoreFromRemote(location, passphrase),
+        throwsA(isA<NoRemoteVault>()),
+      );
+    });
+
+    test('edits made after joining push without a conflict', () async {
+      await service.unlock(passphrase);
+      await service.sync(location: location);
+
+      final joined = freshDevice();
+      await joined.restoreFromRemote(location, passphrase);
+      await joined.upsertHost(
+        SshHost.create(hostname: 'from-the-phone', username: 'ben'),
+      );
+
+      expect(await joined.sync(location: location), SyncOutcome.pushed);
+    });
+  });
+
   test('a new device pulls the vault with just the passphrase', () async {
     await service.unlock(passphrase);
     await service.upsertHost(

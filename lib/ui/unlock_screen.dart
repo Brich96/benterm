@@ -1,25 +1,38 @@
 import 'package:flutter/material.dart';
 
+import 'package:benterm/vault/github_vault_store.dart';
 import 'package:benterm/vault/secret_store.dart';
 import 'package:benterm/vault/vault_crypto.dart';
 import 'package:benterm/vault/vault_service.dart';
 import 'package:benterm/ui/host_list_screen.dart';
 
-/// Passphrase gate. On a device with no vault yet this creates one; on a
-/// device that already has a vault it unlocks it.
+enum VaultEntryMode {
+  /// No vault anywhere yet: pick a passphrase and confirm it.
+  create,
+
+  /// This device already holds an encrypted vault.
+  unlock,
+
+  /// A vault exists on GitHub and this device is joining it.
+  restore,
+}
+
+/// Passphrase gate for all three ways into the vault.
 class UnlockScreen extends StatefulWidget {
   const UnlockScreen({
     super.key,
     required this.service,
     required this.settings,
-    required this.hasExistingVault,
+    required this.mode,
+    this.restoreFrom,
   });
 
   final VaultService service;
   final VaultSyncSettings settings;
+  final VaultEntryMode mode;
 
-  /// Whether an encrypted vault is already stored on this device.
-  final bool hasExistingVault;
+  /// Where to pull the vault from, for [VaultEntryMode.restore].
+  final GithubVaultLocation? restoreFrom;
 
   @override
   State<UnlockScreen> createState() => _UnlockScreenState();
@@ -33,7 +46,7 @@ class _UnlockScreenState extends State<UnlockScreen> {
   String? _error;
   var _busy = false;
 
-  bool get _creating => !widget.hasExistingVault;
+  bool get _creating => widget.mode == VaultEntryMode.create;
 
   @override
   void dispose() {
@@ -51,7 +64,15 @@ class _UnlockScreenState extends State<UnlockScreen> {
     });
 
     try {
-      await widget.service.unlock(_passphrase.text);
+      if (widget.mode == VaultEntryMode.restore) {
+        await widget.service.restoreFromRemote(
+          widget.restoreFrom!,
+          _passphrase.text,
+        );
+      } else {
+        await widget.service.unlock(_passphrase.text);
+      }
+
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
@@ -62,17 +83,49 @@ class _UnlockScreenState extends State<UnlockScreen> {
         ),
       );
     } on WrongVaultPassphrase {
-      setState(() => _error = 'Wrong passphrase');
+      setState(() => _error = 'Wrong passphrase for that vault');
     } on UnreadableVault catch (error) {
       setState(() => _error = error.reason);
+    } on NoRemoteVault {
+      setState(
+        () => _error = 'No vault found in that repository. Check the repo '
+            'and file path, or create a new vault instead.',
+      );
+    } on GithubVaultError catch (error) {
+      setState(() => _error = 'GitHub: ${error.message}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  String get _title => switch (widget.mode) {
+    VaultEntryMode.create => 'Create your vault',
+    VaultEntryMode.unlock => 'Unlock benterm',
+    VaultEntryMode.restore => 'Unlock your existing vault',
+  };
+
+  String get _blurb => switch (widget.mode) {
+    VaultEntryMode.create =>
+      'This passphrase encrypts your hosts and keys. It is never stored or '
+          'sent anywhere, so it cannot be recovered.',
+    VaultEntryMode.unlock => 'Enter your vault passphrase.',
+    VaultEntryMode.restore =>
+      'Enter the same passphrase you used on your other device. It decrypts '
+          'the vault locally; nothing checks it against a server.',
+  };
+
+  String get _action => switch (widget.mode) {
+    VaultEntryMode.create => 'Create vault',
+    VaultEntryMode.unlock => 'Unlock',
+    VaultEntryMode.restore => 'Unlock and sync',
+  };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: widget.mode == VaultEntryMode.unlock
+          ? null
+          : AppBar(toolbarHeight: 40),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
@@ -83,17 +136,13 @@ class _UnlockScreenState extends State<UnlockScreen> {
               padding: const EdgeInsets.all(24),
               children: [
                 Text(
-                  _creating ? 'Create your vault' : 'Unlock benterm',
+                  _title,
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _creating
-                      ? 'This passphrase encrypts your hosts and keys. It is '
-                            'never stored or sent anywhere, so it cannot be '
-                            'recovered.'
-                      : 'Enter your vault passphrase.',
+                  _blurb,
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -139,7 +188,12 @@ class _UnlockScreenState extends State<UnlockScreen> {
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: _busy ? null : _submit,
-                  child: Text(_creating ? 'Create vault' : 'Unlock'),
+                  child: _busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(_action),
                 ),
               ],
             ),

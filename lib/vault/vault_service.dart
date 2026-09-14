@@ -12,6 +12,14 @@ class VaultLocked implements Exception {
   String toString() => 'The vault is locked';
 }
 
+/// Raised when GitHub has no vault at the configured path.
+class NoRemoteVault implements Exception {
+  const NoRemoteVault();
+
+  @override
+  String toString() => 'No vault found in that repository';
+}
+
 /// What a [VaultService.sync] call actually did.
 enum SyncOutcome {
   /// Local changes were written to GitHub.
@@ -84,6 +92,35 @@ class VaultService {
     _vault = decrypted;
     _baseSha = await _blobStore.readSha();
     return decrypted;
+  }
+
+  /// Adopts the vault already on GitHub, for a device that has none.
+  ///
+  /// This is how a second device joins: the passphrase is not checked
+  /// against any server, it simply has to be the one the blob was
+  /// encrypted with.
+  ///
+  /// Throws [NoRemoteVault] if the repository has no vault yet, or
+  /// [WrongVaultPassphrase] if the passphrase does not match.
+  Future<Vault> restoreFromRemote(
+    GithubVaultLocation location,
+    String passphrase,
+  ) async {
+    final remote = _remote;
+    if (remote == null) throw StateError('No GitHub location configured');
+
+    final current = await remote.fetch(location);
+    if (current == null) throw const NoRemoteVault();
+
+    final restored = await _crypto.decrypt(current.contents, passphrase);
+
+    _passphrase = passphrase;
+    _vault = restored;
+    _baseSha = current.sha;
+    _dirty = false;
+    await _blobStore.writeBlob(current.contents);
+    await _blobStore.writeSha(current.sha);
+    return restored;
   }
 
   void lock() {

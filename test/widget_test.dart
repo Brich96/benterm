@@ -46,7 +46,9 @@ void main() {
 
   Future<void> createVault(WidgetTester tester) async {
     await tester.pumpWidget(app());
-    await pumpUntil(tester, find.text('Create your vault'));
+    await pumpUntil(tester, find.text('Create a new vault'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Create a new vault'));
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Passphrase'),
@@ -60,16 +62,38 @@ void main() {
     await pumpUntil(tester, find.text('No hosts yet'));
   }
 
-  testWidgets('first run asks to create a vault', (tester) async {
+  testWidgets('first run offers both a new vault and an existing one', (
+    tester,
+  ) async {
+    // A fresh device cannot tell whether a vault already exists on GitHub:
+    // the repo and token live in this device's keychain, which is empty.
+    // So the choice has to be offered rather than assumed.
     await tester.pumpWidget(app());
-    await pumpUntil(tester, find.text('Create your vault'));
+    await pumpUntil(tester, find.text('Create a new vault'));
 
-    expect(find.widgetWithText(FilledButton, 'Create vault'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Create a new vault'),
+        findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Use my existing vault'),
+        findsOneWidget);
+  });
+
+  testWidgets('joining an existing vault asks for the repo first', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await pumpUntil(tester, find.text('Use my existing vault'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Use my existing vault'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('GitHub sync'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Repository'), findsOneWidget);
   });
 
   testWidgets('a mistyped confirmation blocks vault creation', (tester) async {
     await tester.pumpWidget(app());
-    await pumpUntil(tester, find.text('Create your vault'));
+    await pumpUntil(tester, find.text('Create a new vault'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Create a new vault'));
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Passphrase'),

@@ -5,6 +5,7 @@ import 'package:benterm/vault/secret_store.dart';
 import 'package:benterm/vault/vault_blob_store.dart';
 import 'package:benterm/vault/vault_service.dart';
 import 'package:benterm/ui/unlock_screen.dart';
+import 'package:benterm/ui/welcome_screen.dart';
 
 class BentermApp extends StatefulWidget {
   const BentermApp({super.key, this.blobStore, this.secretStore});
@@ -53,11 +54,18 @@ class _BentermAppState extends State<BentermApp> {
             );
           }
 
-          return UnlockScreen(
-            service: _service,
-            settings: VaultSyncSettings(_secretStore),
-            hasExistingVault: snapshot.data!,
-          );
+          final settings = VaultSyncSettings(_secretStore);
+
+          // With a vault on this device, go straight to the passphrase.
+          // Without one, the device might still be joining an existing
+          // vault on GitHub, which only the user can tell us.
+          return snapshot.data!
+              ? UnlockScreen(
+                  service: _service,
+                  settings: settings,
+                  mode: VaultEntryMode.unlock,
+                )
+              : WelcomeScreen(service: _service, settings: settings);
         },
       ),
     );
