@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required to reach SSH hosts and sync the vault. The Flutter
+         template only declares this for debug builds, where the tool
+         needs it for hot reload. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="benterm"
         android:name="${applicationName}"

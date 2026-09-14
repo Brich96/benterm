@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 
 import 'package:benterm/ssh/terminal_session.dart';
+import 'package:benterm/terminal/key_toolbar.dart';
 import 'package:benterm/terminal/terminal_pane.dart';
 
 /// Records what the terminal sends, without any transport behind it.
@@ -97,5 +99,79 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
 
     expect(sentAfterKeys(), '\x7f');
+  });
+
+  testWidgets('desktop shows no on-screen key toolbar', (tester) async {
+    await pumpPane(tester);
+    final toolbars = find.byType(KeyToolbar).evaluate().length;
+    debugDefaultTargetPlatformOverride = null;
+
+    expect(toolbars, 0);
+  });
+
+  group('mobile', () {
+    Future<void> pumpMobilePane(WidgetTester tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TerminalPane(session: session))),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Terminal terminalOf(WidgetTester tester) =>
+        tester.widget<TerminalView>(find.byType(TerminalView)).terminal;
+
+    testWidgets('the key toolbar is shown', (tester) async {
+      await pumpMobilePane(tester);
+      final toolbars = find.byType(KeyToolbar).evaluate().length;
+      debugDefaultTargetPlatformOverride = null;
+
+      expect(toolbars, 1);
+    });
+
+    testWidgets('esc sends an escape', (tester) async {
+      await pumpMobilePane(tester);
+      await tester.tap(find.text('esc'));
+      await tester.pump();
+
+      expect(sentAfterKeys(), '\x1b');
+    });
+
+    testWidgets('arrows send cursor sequences', (tester) async {
+      await pumpMobilePane(tester);
+      await tester.tap(find.byIcon(Icons.arrow_upward));
+      await tester.pump();
+
+      expect(sentAfterKeys(), '\x1b[A');
+    });
+
+    testWidgets('sticky ctrl turns the next letter into a control code', (
+      tester,
+    ) async {
+      await pumpMobilePane(tester);
+      await tester.tap(find.text('ctrl'));
+      await tester.pump();
+
+      // Mobile keeps xterm's text-input path, so simulate what it delivers.
+      terminalOf(tester).textInput('c');
+      await tester.pump();
+
+      expect(sentAfterKeys(), '\x03');
+    });
+
+    testWidgets('ctrl applies once and then clears', (tester) async {
+      await pumpMobilePane(tester);
+      await tester.tap(find.text('ctrl'));
+      await tester.pump();
+
+      final terminal = terminalOf(tester);
+      terminal.textInput('c');
+      await tester.pump();
+      terminal.textInput('c');
+      await tester.pump();
+
+      expect(sentAfterKeys(), '\x03c');
+    });
   });
 }

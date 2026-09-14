@@ -26,7 +26,7 @@ Future<void> pumpUntil(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
   }
-  fail('timed out waiting for ${finder.description}');
+  fail('timed out waiting for ${finder.describeMatch(Plurality.one)}');
 }
 
 String readTerminal(WidgetTester tester) {

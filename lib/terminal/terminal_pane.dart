@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 
 import 'package:benterm/ssh/terminal_session.dart';
+import 'package:benterm/terminal/key_toolbar.dart';
 
 /// Renders a [TerminalSession] as an interactive terminal.
 ///
@@ -33,11 +34,16 @@ class _TerminalPaneState extends State<TerminalPane> {
   StreamSubscription<String>? _subscription;
   var _laidOut = false;
 
+  /// Sticky modifiers from the mobile toolbar, applied to the next
+  /// character the terminal emits and then cleared.
+  var _ctrlPending = false;
+  var _altPending = false;
+
   @override
   void initState() {
     super.initState();
 
-    _terminal.onOutput = widget.session.write;
+    _terminal.onOutput = _sendFromTerminal;
     _terminal.onResize = widget.session.resize;
     _subscription = widget.session.output.listen(_receive);
 
@@ -58,6 +64,36 @@ class _TerminalPaneState extends State<TerminalPane> {
     } catch (error) {
       _receive('\r\n\x1b[31msession failed: $error\x1b[0m\r\n');
     }
+  }
+
+  /// Applies any sticky modifier before handing input to the session.
+  void _sendFromTerminal(String data) {
+    var output = data;
+
+    if (_ctrlPending && data.length == 1) {
+      output = _asControlCharacter(data) ?? data;
+    }
+    if (_altPending) {
+      output = '$output';
+    }
+    if (_ctrlPending || _altPending) {
+      setState(() {
+        _ctrlPending = false;
+        _altPending = false;
+      });
+    }
+
+    widget.session.write(output);
+  }
+
+  /// Maps a letter to its control character: `c` becomes 0x03, and the
+  /// bracket-to-underscore range follows the same offset rule.
+  String? _asControlCharacter(String character) {
+    final code = character.codeUnitAt(0);
+    if (code >= 0x61 && code <= 0x7a) return String.fromCharCode(code - 0x60);
+    if (code >= 0x41 && code <= 0x5a) return String.fromCharCode(code - 0x40);
+    if (code >= 0x5b && code <= 0x5f) return String.fromCharCode(code - 0x40);
+    return null;
   }
 
   void _receive(String data) {
@@ -113,7 +149,7 @@ class _TerminalPaneState extends State<TerminalPane> {
 
   @override
   Widget build(BuildContext context) {
-    return TerminalView(
+    final terminal = TerminalView(
       _terminal,
       controller: _controller,
       autofocus: true,
@@ -122,6 +158,23 @@ class _TerminalPaneState extends State<TerminalPane> {
       padding: const EdgeInsets.all(8),
       hardwareKeyboardOnly: _isDesktop,
       onKeyEvent: _isDesktop ? _handlePrintableKey : null,
+    );
+
+    if (_isDesktop) return terminal;
+
+    // Soft keyboards have no esc, ctrl, tab or arrow keys, so a terminal
+    // without these is close to unusable on a phone.
+    return Column(
+      children: [
+        Expanded(child: terminal),
+        KeyToolbar(
+          ctrlActive: _ctrlPending,
+          altActive: _altPending,
+          onToggleCtrl: () => setState(() => _ctrlPending = !_ctrlPending),
+          onToggleAlt: () => setState(() => _altPending = !_altPending),
+          onSend: widget.session.write,
+        ),
+      ],
     );
   }
 }
