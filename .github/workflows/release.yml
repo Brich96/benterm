@@ -2,11 +2,20 @@ name: Release
 
 # Tag a commit to publish: `git tag v0.1.0 && git push origin v0.1.0`.
 # Manual runs build and upload artifacts without creating a release.
+#
+# Windows and Android build every time. macOS and Linux are kept here but
+# parked until they are worked out: tick `build_macos_linux` on a manual run
+# to exercise them without holding up a release.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      build_macos_linux:
+        description: 'Also build macOS and Linux'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -55,6 +64,7 @@ jobs:
   linux:
     name: Build Linux
     needs: test
+    if: inputs.build_macos_linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +90,7 @@ jobs:
   macos:
     name: Build macOS
     needs: test
+    if: inputs.build_macos_linux
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -131,7 +142,16 @@ jobs:
   release:
     name: Publish release
     needs: [windows, linux, macos, android]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A skipped job would skip this one too, so depend on results rather
+    # than on completion: parked platforms must not block a release, and a
+    # broken one must not ship a half-empty release either.
+    if: >-
+      always()
+      && startsWith(github.ref, 'refs/tags/v')
+      && needs.windows.result == 'success'
+      && needs.android.result == 'success'
+      && needs.linux.result != 'failure'
+      && needs.macos.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
