@@ -77,60 +77,9 @@ jobs:
           name: benterm-linux-x64
           path: benterm-linux-x64.tar.gz
 
-  macos:
-    name: Build macOS
-    needs: test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter build macos --release
-      # Unsigned: Gatekeeper will need a right-click > Open on first launch.
-      # Signing needs an Apple Developer certificate in repository secrets.
-      - name: Package
-        run: |
-          cd build/macos/Build/Products/Release
-          ditto -c -k --keepParent benterm.app \
-            "$GITHUB_WORKSPACE/benterm-macos.zip"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benterm-macos
-          path: benterm-macos.zip
-
-  android:
-    name: Build Android
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      # No signing config, so this is debug-key signed: fine for sideloading
-      # onto your own devices, not publishable to Play.
-      - run: flutter build apk --release
-      - name: Rename
-        run: mv build/app/outputs/flutter-apk/app-release.apk benterm-android.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benterm-android
-          path: benterm-android.apk
-
   release:
     name: Publish release
-    needs: [windows, linux, macos, android]
+    needs: [windows, linux]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -143,5 +92,4 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           body: |
-            Desktop builds are unsigned; the Android APK is signed with a
-            debug key. Both mean an OS warning on first launch.
+            Unsigned builds: Windows SmartScreen will warn on first launch.
