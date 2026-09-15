@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'package:benterm/ssh/echo_session.dart';
 import 'package:benterm/ssh/ssh_host.dart';
-import 'package:benterm/ssh/ssh_session.dart';
+import 'package:benterm/ui/sessions_screen.dart';
 import 'package:benterm/ui/terminal_screen.dart';
+import 'package:benterm/vault/vault_service.dart';
 
 enum _AuthMethod { password, privateKey }
 
 /// Ad-hoc connection form. The vault work replaces this with a saved host
 /// list; the fields here map one-to-one onto [SshHost].
 class ConnectScreen extends StatefulWidget {
-  const ConnectScreen({super.key});
+  const ConnectScreen({super.key, this.service});
+
+  /// Used to check and record host keys. Quick connections are not saved
+  /// as hosts, but their host keys are still pinned.
+  final VaultService? service;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -55,10 +60,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => TerminalScreen(
-          session: SshSession(host),
-          title: host.displayName,
-        ),
+        builder: (_) => SessionsScreen(host: host, service: widget.service),
       ),
     );
   }
@@ -66,10 +68,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
   void _openEchoDemo() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => TerminalScreen(
-          session: EchoSession(),
-          title: 'local echo',
-        ),
+        builder: (_) =>
+            TerminalScreen(session: EchoSession(), title: 'local echo'),
       ),
     );
   }
@@ -182,10 +182,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     onFieldSubmitted: (_) => _connect(),
                   ),
                 const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _connect,
-                  child: const Text('Connect'),
-                ),
+                FilledButton(onPressed: _connect, child: const Text('Connect')),
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: _openEchoDemo,

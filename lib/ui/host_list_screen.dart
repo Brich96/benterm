@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'package:benterm/ssh/ssh_host.dart';
-import 'package:benterm/ssh/ssh_session.dart';
+import 'package:benterm/ui/sessions_screen.dart';
 import 'package:benterm/vault/github_vault_store.dart';
 import 'package:benterm/vault/secret_store.dart';
 import 'package:benterm/vault/vault_service.dart';
 import 'package:benterm/ui/connect_screen.dart';
 import 'package:benterm/ui/host_edit_screen.dart';
 import 'package:benterm/ui/sync_settings_screen.dart';
-import 'package:benterm/ui/terminal_screen.dart';
 
 /// The saved hosts in the vault: connect, edit, and sync with GitHub.
 class HostListScreen extends StatefulWidget {
@@ -26,8 +25,31 @@ class HostListScreen extends StatefulWidget {
 }
 
 class _HostListScreenState extends State<HostListScreen> {
+  final _search = TextEditingController();
+
   GithubVaultLocation? _location;
   var _syncing = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Hosts matching the search box, by label, user, hostname or port.
+  List<SshHost> get _visibleHosts {
+    final query = _search.text.trim().toLowerCase();
+    final hosts = widget.service.vault.hosts;
+    if (query.isEmpty) return hosts;
+
+    return [
+      for (final host in hosts)
+        if ('${host.label ?? ''} ${host.username}@${host.hostname}:${host.port}'
+            .toLowerCase()
+            .contains(query))
+          host,
+    ];
+  }
 
   @override
   void initState() {
@@ -41,20 +63,22 @@ class _HostListScreenState extends State<HostListScreen> {
   }
 
   void _connect(SshHost host) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => TerminalScreen(
-          session: SshSession(host),
-          title: host.displayName,
-        ),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => SessionsScreen(host: host, service: widget.service),
+          ),
+        )
+        // Host keys pinned during the session change what the list shows.
+        .then((_) {
+          if (mounted) setState(() {});
+        });
   }
 
   Future<void> _addHost() async {
-    final host = await Navigator.of(context).push<SshHost>(
-      MaterialPageRoute(builder: (_) => const HostEditScreen()),
-    );
+    final host = await Navigator.of(
+      context,
+    ).push<SshHost>(MaterialPageRoute(builder: (_) => const HostEditScreen()));
     if (host == null) return;
 
     await widget.service.upsertHost(host);
@@ -101,10 +125,8 @@ class _HostListScreenState extends State<HostListScreen> {
   Future<void> _openSyncSettings() async {
     final location = await Navigator.of(context).push<GithubVaultLocation>(
       MaterialPageRoute(
-        builder: (_) => SyncSettingsScreen(
-          settings: widget.settings,
-          current: _location,
-        ),
+        builder: (_) =>
+            SyncSettingsScreen(settings: widget.settings, current: _location),
       ),
     );
     if (location != null && mounted) setState(() => _location = location);
@@ -181,15 +203,17 @@ class _HostListScreenState extends State<HostListScreen> {
 
   void _report(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final hosts = widget.service.vault.hosts;
+    final allHosts = widget.service.vault.hosts;
+    final hosts = _visibleHosts;
     final unpushed = widget.service.hasUnpushedChanges;
+    // Searching is only worth the space once the list outgrows the screen.
+    final searchable = allHosts.length > 5;
 
     return Scaffold(
       appBar: AppBar(
@@ -222,7 +246,9 @@ class _HostListScreenState extends State<HostListScreen> {
           IconButton(
             tooltip: 'Quick connect (not saved)',
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ConnectScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) => ConnectScreen(service: widget.service),
+              ),
             ),
             icon: const Icon(Icons.bolt),
           ),
@@ -232,34 +258,67 @@ class _HostListScreenState extends State<HostListScreen> {
         onPressed: _addHost,
         child: const Icon(Icons.add),
       ),
-      body: hosts.isEmpty
+      body: allHosts.isEmpty
           ? _EmptyState(onAdd: _addHost)
-          : ListView.builder(
-              itemCount: hosts.length,
-              itemBuilder: (context, index) {
-                final host = hosts[index];
-                return ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: Text(host.displayName),
-                  subtitle: Text(
-                    '${host.username}@${host.hostname}:${host.port}'
-                    '${host.privateKeyPem != null ? '  ·  key' : ''}',
+          : Column(
+              children: [
+                if (searchable)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: TextField(
+                      controller: _search,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        hintText: 'Search hosts',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () => setState(_search.clear),
+                              ),
+                      ),
+                    ),
                   ),
-                  onTap: () => _connect(host),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) => switch (value) {
-                      'edit' => _editHost(host),
-                      'delete' => _deleteHost(host),
-                      _ => null,
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
-                    ],
-                  ),
-                );
-              },
+                if (hosts.isEmpty)
+                  const Expanded(
+                    child: Center(child: Text('No hosts match that search')),
+                  )
+                else
+                  Expanded(child: _hostList(hosts)),
+              ],
             ),
+    );
+  }
+
+  Widget _hostList(List<SshHost> hosts) {
+    return ListView.builder(
+      itemCount: hosts.length,
+      itemBuilder: (context, index) {
+        final host = hosts[index];
+        return ListTile(
+          leading: const Icon(Icons.dns_outlined),
+          title: Text(host.displayName),
+          subtitle: Text(
+            '${host.username}@${host.hostname}:${host.port}'
+            '${host.privateKeyPem != null ? '  ·  key' : ''}',
+          ),
+          onTap: () => _connect(host),
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) => switch (value) {
+              'edit' => _editHost(host),
+              'delete' => _deleteHost(host),
+              _ => null,
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'edit', child: Text('Edit')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+          ),
+        );
+      },
     );
   }
 }

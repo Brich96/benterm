@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import 'package:benterm/ssh/host_key.dart';
 import 'package:benterm/ssh/ssh_host.dart';
 import 'package:benterm/ssh/terminal_session.dart';
 
@@ -11,9 +12,19 @@ import 'package:benterm/ssh/terminal_session.dart';
 ///
 /// Drop-in replacement for the echo stub: the terminal layer is unchanged.
 class SshSession implements TerminalSession {
-  SshSession(this.host);
+  SshSession(this.host, {this.pinnedFingerprint, this.onHostKeyPinned});
 
   final SshHost host;
+
+  /// The fingerprint recorded for this host, or null if never connected.
+  final String? pinnedFingerprint;
+
+  /// Called with a newly trusted fingerprint so it can be saved.
+  final Future<void> Function(String fingerprint)? onHostKeyPinned;
+
+  /// Set when a key was refused, so the failure can be reported as a
+  /// mismatch rather than the generic handshake error dartssh2 throws.
+  String? _rejectedFingerprint;
 
   final _output = StreamController<String>.broadcast();
   final _done = Completer<void>();
@@ -52,21 +63,50 @@ class SshSession implements TerminalSession {
           ? null
           : SSHKeyPair.fromPem(pem, host.privateKeyPassphrase),
       onPasswordRequest: password == null ? null : () => password,
-      // TODO(vault): pin host keys in the vault's known-hosts store and
-      // prompt on mismatch. Until then every key is accepted on first use.
-      onVerifyHostKey: (type, key) => true,
+      onVerifyHostKey: (type, fingerprintBytes) async {
+        // dartssh2 hands over the OpenSSH-format fingerprint already:
+        // "SHA256:" plus unpadded base64, as UTF-8 bytes.
+        final observed = utf8.decode(fingerprintBytes);
+
+        switch (verifyHostKey(
+          pinned: pinnedFingerprint,
+          observed: observed,
+        )) {
+          case HostKeyVerdict.firstUse:
+            await onHostKeyPinned?.call(observed);
+            return true;
+          case HostKeyVerdict.matches:
+            return true;
+          case HostKeyVerdict.mismatch:
+            _rejectedFingerprint = observed;
+            return false;
+        }
+      },
     );
     _client = client;
 
-    final shell = await client.shell(
-      pty: SSHPtyConfig(
-        type: 'xterm-256color',
-        width: _width,
-        height: _height,
-        pixelWidth: _pixelWidth,
-        pixelHeight: _pixelHeight,
-      ),
-    );
+    final SSHSession shell;
+    try {
+      shell = await client.shell(
+        pty: SSHPtyConfig(
+          type: 'xterm-256color',
+          width: _width,
+          height: _height,
+          pixelWidth: _pixelWidth,
+          pixelHeight: _pixelHeight,
+        ),
+      );
+    } on Exception {
+      final rejected = _rejectedFingerprint;
+      if (rejected != null) {
+        throw HostKeyMismatch(
+          endpoint: host.endpoint,
+          pinned: pinnedFingerprint!,
+          observed: rejected,
+        );
+      }
+      rethrow;
+    }
     _shell = shell;
 
     const decoder = Utf8Decoder(allowMalformed: true);
