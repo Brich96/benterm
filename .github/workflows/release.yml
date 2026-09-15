@@ -160,11 +160,24 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/benterm-release.p12
+          # The keystore is generated with this alias; the secret only has to
+          # override it if that ever changes.
+          alias="${KEY_ALIAS:-benterm}"
+          if [ -z "$KEY_ALIAS" ]; then
+            echo "::warning::ANDROID_KEY_ALIAS is not set, using '$alias'"
+          fi
+          # Check the alias up front: Gradle only discovers a bad one four
+          # minutes into the build, and reports it as an empty-alias error.
+          if ! keytool -list -keystore android/app/benterm-release.p12 -storetype PKCS12 -storepass "$KEYSTORE_PASSWORD" -alias "$alias" > /dev/null 2>&1; then
+            echo "::error::No key '$alias' in the keystore. Aliases present:"
+            keytool -list -keystore android/app/benterm-release.p12 -storetype PKCS12 -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | grep -i "PrivateKeyEntry" || true
+            exit 1
+          fi
           # PKCS12 uses one password for both the store and the key.
           {
             echo "storeFile=benterm-release.p12"
             echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyAlias=$KEY_ALIAS"
+            echo "keyAlias=$alias"
             echo "keyPassword=$KEYSTORE_PASSWORD"
           } > android/key.properties
       - run: flutter build apk --release ${{ needs.test.outputs.build_args }}
