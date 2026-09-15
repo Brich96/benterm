@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:benterm/vault/github_vault_store.dart';
 import 'package:benterm/vault/secret_store.dart';
+import 'package:benterm/update/update_service.dart';
 import 'package:benterm/vault/vault_service.dart';
 import 'package:benterm/ui/sync_settings_screen.dart';
 import 'package:benterm/ui/unlock_screen.dart';
@@ -17,10 +18,14 @@ class WelcomeScreen extends StatelessWidget {
     super.key,
     required this.service,
     required this.settings,
+    this.updates,
   });
 
   final VaultService service;
   final VaultSyncSettings settings;
+
+  /// Passed through to the host list, which shows the update banner.
+  final UpdateService? updates;
 
   Future<void> _createNew(BuildContext context) async {
     await Navigator.of(context).push(
@@ -28,6 +33,7 @@ class WelcomeScreen extends StatelessWidget {
         builder: (_) => UnlockScreen(
           service: service,
           settings: settings,
+          updates: updates,
           mode: VaultEntryMode.create,
         ),
       ),
@@ -45,6 +51,7 @@ class WelcomeScreen extends StatelessWidget {
         builder: (_) => UnlockScreen(
           service: service,
           settings: settings,
+          updates: updates,
           mode: VaultEntryMode.restore,
           restoreFrom: location,
         ),

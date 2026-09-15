@@ -6,11 +6,7 @@ import 'package:benterm/vault/secret_store.dart';
 /// Where the encrypted vault syncs to. The token is held in the platform
 /// keychain, never in the vault blob itself.
 class SyncSettingsScreen extends StatefulWidget {
-  const SyncSettingsScreen({
-    super.key,
-    required this.settings,
-    this.current,
-  });
+  const SyncSettingsScreen({super.key, required this.settings, this.current});
 
   final VaultSyncSettings settings;
   final GithubVaultLocation? current;

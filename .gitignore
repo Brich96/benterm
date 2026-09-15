@@ -46,3 +46,10 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Android release signing. The keystore and its passwords live outside the
+# repo; CI writes these from secrets.
+android/key.properties
+*.jks
+*.p12
+*.keystore

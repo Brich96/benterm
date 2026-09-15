@@ -23,9 +23,7 @@ class _HostEditScreenState extends State<HostEditScreen> {
   late final _hostname = TextEditingController(
     text: widget.host?.hostname ?? '',
   );
-  late final _port = TextEditingController(
-    text: '${widget.host?.port ?? 22}',
-  );
+  late final _port = TextEditingController(text: '${widget.host?.port ?? 22}');
   late final _username = TextEditingController(
     text: widget.host?.username ?? '',
   );

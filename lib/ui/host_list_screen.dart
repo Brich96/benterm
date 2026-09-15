@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:benterm/ssh/ssh_host.dart';
 import 'package:benterm/ui/sessions_screen.dart';
+import 'package:benterm/ui/update_banner.dart';
 import 'package:benterm/vault/github_vault_store.dart';
 import 'package:benterm/vault/secret_store.dart';
+import 'package:benterm/update/update_service.dart';
 import 'package:benterm/vault/vault_service.dart';
 import 'package:benterm/ui/connect_screen.dart';
 import 'package:benterm/ui/host_edit_screen.dart';
@@ -15,10 +17,14 @@ class HostListScreen extends StatefulWidget {
     super.key,
     required this.service,
     required this.settings,
+    this.updates,
   });
 
   final VaultService service;
   final VaultSyncSettings settings;
+
+  /// Null in tests and wherever self-updating does not apply.
+  final UpdateService? updates;
 
   @override
   State<HostListScreen> createState() => _HostListScreenState();
@@ -258,38 +264,47 @@ class _HostListScreenState extends State<HostListScreen> {
         onPressed: _addHost,
         child: const Icon(Icons.add),
       ),
-      body: allHosts.isEmpty
-          ? _EmptyState(onAdd: _addHost)
-          : Column(
-              children: [
-                if (searchable)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                    child: TextField(
-                      controller: _search,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        hintText: 'Search hosts',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: _search.text.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => setState(_search.clear),
-                              ),
-                      ),
-                    ),
+      body: Column(
+        children: [
+          if (widget.updates != null) UpdateBanner(service: widget.updates!),
+          Expanded(
+            child: allHosts.isEmpty
+                ? _EmptyState(onAdd: _addHost)
+                : Column(
+                    children: [
+                      if (searchable)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: TextField(
+                            controller: _search,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              prefixIcon: const Icon(Icons.search, size: 18),
+                              hintText: 'Search hosts',
+                              border: const OutlineInputBorder(),
+                              suffixIcon: _search.text.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      onPressed: () => setState(_search.clear),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      if (hosts.isEmpty)
+                        const Expanded(
+                          child: Center(
+                            child: Text('No hosts match that search'),
+                          ),
+                        )
+                      else
+                        Expanded(child: _hostList(hosts)),
+                    ],
                   ),
-                if (hosts.isEmpty)
-                  const Expanded(
-                    child: Center(child: Text('No hosts match that search')),
-                  )
-                else
-                  Expanded(child: _hostList(hosts)),
-              ],
-            ),
+          ),
+        ],
+      ),
     );
   }
 

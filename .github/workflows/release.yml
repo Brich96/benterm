@@ -147,9 +147,35 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # No signing config, so this is debug-key signed: fine for sideloading
-      # onto your own devices, not publishable to Play.
+      # Every build must carry the same signature, or Android refuses to
+      # install one release over another and in-app updates cannot work.
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set; a release signed with a throwaway key cannot be updated in place"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/benterm-release.p12
+          # PKCS12 uses one password for both the store and the key.
+          {
+            echo "storeFile=benterm-release.p12"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > android/key.properties
       - run: flutter build apk --release ${{ needs.test.outputs.build_args }}
+      - name: Verify the APK carries the release signature
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          # A release signed with the wrong key installs once and then blocks
+          # every future update, so fail the build rather than publish it.
+          expected=$(openssl pkcs12 -in android/app/benterm-release.p12 -passin env:KEYSTORE_PASSWORD -nokeys -clcerts | openssl x509 -pubkey -noout | openssl pkey -pubin -outform DER | sha256sum | cut -d" " -f1)
+          python3 tool/verify_apk_signature.py build/app/outputs/flutter-apk/app-release.apk --expect "$expected"
       - name: Rename
         run: mv build/app/outputs/flutter-apk/app-release.apk benterm-android.apk
       - uses: actions/upload-artifact@v4
@@ -176,6 +202,13 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Checksum the artifacts
+        # Lets the in-app updater confirm a download arrived intact before
+        # it installs it.
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*

@@ -1,5 +1,8 @@
+import 'dart:ui' show AppExitResponse;
+
 import 'package:flutter/material.dart';
 
+import 'package:benterm/update/update_service.dart';
 import 'package:benterm/vault/github_vault_store.dart';
 import 'package:benterm/vault/secret_store.dart';
 import 'package:benterm/vault/vault_blob_store.dart';
@@ -8,11 +11,14 @@ import 'package:benterm/ui/unlock_screen.dart';
 import 'package:benterm/ui/welcome_screen.dart';
 
 class BentermApp extends StatefulWidget {
-  const BentermApp({super.key, this.blobStore, this.secretStore});
+  const BentermApp({super.key, this.blobStore, this.secretStore, this.updates});
 
   /// Overridable for tests; defaults to the platform locations.
   final VaultBlobStore? blobStore;
   final SecretStore? secretStore;
+
+  /// Overridable for tests, which must not reach out to GitHub.
+  final UpdateService? updates;
 
   @override
   State<BentermApp> createState() => _BentermAppState();
@@ -28,6 +34,33 @@ class _BentermAppState extends State<BentermApp> {
     blobStore: _blobStore,
     remote: GithubVaultStore(),
   );
+
+  late final UpdateService _updates = widget.updates ?? UpdateService();
+
+  /// Runs a staged update once the app is closing, when the user asked for
+  /// it to be installed on exit. The helper waits for this process to go
+  /// away before replacing anything.
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(
+    onExitRequested: () async {
+      if (_updates.installOnExit && _updates.hasStagedUpdate) {
+        await _updates.applyOnExit();
+      }
+      return AppExitResponse.exit;
+    },
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle;
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    _updates.close();
+    super.dispose();
+  }
 
   late final Future<bool> _hasVault = _blobStore.readBlob().then(
     (blob) => blob != null,
@@ -64,8 +97,13 @@ class _BentermAppState extends State<BentermApp> {
                   service: _service,
                   settings: settings,
                   mode: VaultEntryMode.unlock,
+                  updates: _updates,
                 )
-              : WelcomeScreen(service: _service, settings: settings);
+              : WelcomeScreen(
+                  service: _service,
+                  settings: settings,
+                  updates: _updates,
+                );
         },
       ),
     );

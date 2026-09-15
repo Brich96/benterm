@@ -7,11 +7,7 @@ import 'package:benterm/terminal/terminal_pane.dart';
 /// host list arrive with the vault work; this is the one-session case they
 /// will wrap.
 class TerminalScreen extends StatelessWidget {
-  const TerminalScreen({
-    super.key,
-    required this.session,
-    required this.title,
-  });
+  const TerminalScreen({super.key, required this.session, required this.title});
 
   final TerminalSession session;
   final String title;

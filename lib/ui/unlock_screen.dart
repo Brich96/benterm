@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:benterm/vault/github_vault_store.dart';
 import 'package:benterm/vault/secret_store.dart';
 import 'package:benterm/vault/vault_crypto.dart';
+import 'package:benterm/update/update_service.dart';
 import 'package:benterm/vault/vault_service.dart';
 import 'package:benterm/ui/host_list_screen.dart';
 
@@ -23,12 +24,16 @@ class UnlockScreen extends StatefulWidget {
     super.key,
     required this.service,
     required this.settings,
+    this.updates,
     required this.mode,
     this.restoreFrom,
   });
 
   final VaultService service;
   final VaultSyncSettings settings;
+
+  /// Passed through to the host list, which shows the update banner.
+  final UpdateService? updates;
   final VaultEntryMode mode;
 
   /// Where to pull the vault from, for [VaultEntryMode.restore].
@@ -79,6 +84,7 @@ class _UnlockScreenState extends State<UnlockScreen> {
           builder: (_) => HostListScreen(
             service: widget.service,
             settings: widget.settings,
+            updates: widget.updates,
           ),
         ),
       );
@@ -88,7 +94,8 @@ class _UnlockScreenState extends State<UnlockScreen> {
       setState(() => _error = error.reason);
     } on NoRemoteVault {
       setState(
-        () => _error = 'No vault found in that repository. Check the repo '
+        () => _error =
+            'No vault found in that repository. Check the repo '
             'and file path, or create a new vault instead.',
       );
     } on GithubVaultError catch (error) {
