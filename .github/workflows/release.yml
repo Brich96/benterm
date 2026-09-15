@@ -28,8 +28,26 @@ jobs:
   test:
     name: Analyze and test
     runs-on: ubuntu-latest
+    outputs:
+      # Build flags for the platform jobs, so the shipped version always
+      # matches the tag instead of whatever pubspec.yaml happens to say.
+      build_args: ${{ steps.version.outputs.args }}
     steps:
       - uses: actions/checkout@v4
+      - name: Derive version from tag
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            # Android needs a build number that only ever increases, and
+            # the run number is monotonic for the life of the workflow.
+            echo "args=--build-name=$version --build-number=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "Building version $version"
+          else
+            # Untagged run: keep the pubspec version as-is.
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -51,7 +69,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build windows --release
+      - run: flutter build windows --release ${{ needs.test.outputs.build_args }}
       - name: Package
         run: |
           Compress-Archive -Path build/windows/x64/runner/Release/* `
@@ -79,7 +97,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build linux --release
+      - run: flutter build linux --release ${{ needs.test.outputs.build_args }}
       - name: Package
         run: tar -czf benterm-linux-x64.tar.gz -C build/linux/x64/release/bundle .
       - uses: actions/upload-artifact@v4
@@ -100,7 +118,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build macos --release
+      - run: flutter build macos --release ${{ needs.test.outputs.build_args }}
       # Unsigned: Gatekeeper will need a right-click > Open on first launch.
       # Signing needs an Apple Developer certificate in repository secrets.
       - name: Package
@@ -131,7 +149,7 @@ jobs:
       - run: flutter pub get
       # No signing config, so this is debug-key signed: fine for sideloading
       # onto your own devices, not publishable to Play.
-      - run: flutter build apk --release
+      - run: flutter build apk --release ${{ needs.test.outputs.build_args }}
       - name: Rename
         run: mv build/app/outputs/flutter-apk/app-release.apk benterm-android.apk
       - uses: actions/upload-artifact@v4
