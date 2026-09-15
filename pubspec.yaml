@@ -1,5 +1,5 @@
 name: benterm
-description: "A new Flutter project."
+description: "An SSH client for Windows and Android, with an encrypted host vault that syncs through a private GitHub repo."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
