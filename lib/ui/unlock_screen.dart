@@ -107,7 +107,7 @@ class _UnlockScreenState extends State<UnlockScreen> {
 
   String get _title => switch (widget.mode) {
     VaultEntryMode.create => 'Create your vault',
-    VaultEntryMode.unlock => 'Unlock benterm',
+    VaultEntryMode.unlock => 'Unlock BenTerm',
     VaultEntryMode.restore => 'Unlock your existing vault',
   };
 

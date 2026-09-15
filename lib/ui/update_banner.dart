@@ -157,7 +157,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           if (!mounted) return;
           setState(
             () => _error =
-                'Android needs permission to install apps from benterm. '
+                'Android needs permission to install apps from BenTerm. '
                 'Allow it in the screen that opens, then try again.',
           );
         }
@@ -179,7 +179,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     navigator.pop(true);
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('Update will be installed when you close benterm'),
+        content: Text('Update will be installed when you close BenTerm'),
       ),
     );
   }
@@ -189,7 +189,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     final notes = widget.release.notes.trim();
 
     return AlertDialog(
-      title: Text('benterm ${widget.release.version}'),
+      title: Text('BenTerm ${widget.release.version}'),
       content: SizedBox(
         width: 420,
         child: Column(

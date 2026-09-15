@@ -23,7 +23,7 @@ class EchoSession implements TerminalSession {
 
   @override
   Future<void> start() async {
-    _emit('benterm — local echo session (no SSH yet)\r\n');
+    _emit('BenTerm — local echo session (no SSH yet)\r\n');
     _emit('Type something; Enter echoes the line back.\r\n\r\n');
     _emit(_prompt);
   }

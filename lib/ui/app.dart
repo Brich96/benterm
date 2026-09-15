@@ -69,7 +69,7 @@ class _BentermAppState extends State<BentermApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'benterm',
+      title: 'BenTerm',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

@@ -29,7 +29,7 @@ class InstallNotWritable implements Exception {
 
   @override
   String toString() =>
-      'benterm cannot update itself because $path is not writable. '
+      'BenTerm cannot update itself because $path is not writable. '
       'Move the folder somewhere writable, such as under your user folder.';
 }
 

@@ -70,7 +70,7 @@ class WelcomeScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             children: [
               Text(
-                'benterm',
+                'BenTerm',
                 style: Theme.of(context).textTheme.headlineMedium,
                 textAlign: TextAlign.center,
               ),

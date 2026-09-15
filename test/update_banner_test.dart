@@ -91,7 +91,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'View'));
     await tester.pumpAndSettle();
 
-    expect(find.text('benterm 0.3.0'), findsOneWidget);
+    expect(find.text('BenTerm 0.3.0'), findsOneWidget);
     expect(find.text('What changed in v0.3.0'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Update now'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Later'), findsOneWidget);
@@ -105,7 +105,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Later'));
     await tester.pumpAndSettle();
 
-    expect(find.text('benterm 0.3.0'), findsNothing);
+    expect(find.text('BenTerm 0.3.0'), findsNothing);
     expect(find.text('Version 0.3.0 is available'), findsOneWidget);
   });
 }

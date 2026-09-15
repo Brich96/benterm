@@ -80,7 +80,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('benterm'),
+        title: const Text('BenTerm'),
         titleTextStyle: Theme.of(context).textTheme.titleMedium,
         toolbarHeight: 40,
       ),
