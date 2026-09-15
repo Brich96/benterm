@@ -56,17 +56,17 @@ class WindowsUpdater {
     return into;
   }
 
-  /// Starts the swap and returns once the helper is running.
+  /// Starts the swap and returns the helper, once it is running.
   ///
   /// The caller must exit immediately afterwards: the helper waits for this
   /// process to go away before touching any files.
-  Future<void> applyAndExit({
+  Future<Process> applyAndExit({
     required Directory staging,
     required bool relaunch,
   }) async {
     final script = await _writeScript();
 
-    await Process.start(
+    return Process.start(
       'powershell.exe',
       [
         '-NoProfile',
@@ -87,7 +87,12 @@ class WindowsUpdater {
         executablePath,
         if (relaunch) '-Relaunch',
       ],
-      mode: ProcessStartMode.detached,
+      // Not detached: a detached process gets no console and no standard
+      // handles, and powershell.exe exits immediately without running a
+      // line of the script — the app closed and nothing was ever swapped.
+      // A normal child outlives this process on Windows, which is all the
+      // helper needs.
+      mode: ProcessStartMode.normal,
     );
   }
 
@@ -112,10 +117,21 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Nothing here has a console to complain to, so the only way a failed
+# update can be explained afterwards is a log.
+$log = Join-Path $env:TEMP 'benterm-update.log'
+function Write-Log($message) {
+  "$(Get-Date -Format o)  $message" |
+    Out-File -FilePath $log -Append -Encoding utf8 -ErrorAction SilentlyContinue
+}
+
+Write-Log "applying $Staging over $InstallDir"
+
 # The app still holds its own executable open; wait for it to go.
 try {
   Wait-Process -Id $TargetPid -Timeout 120 -ErrorAction Stop
 } catch [System.TimeoutException] {
+  Write-Log "gave up waiting for process $TargetPid to exit"
   exit 2
 } catch {
   # Already gone, which is what we wanted.
@@ -135,6 +151,7 @@ try {
   }
   Copy-Item -Path (Join-Path $Staging '*') -Destination $InstallDir -Recurse -Force
 } catch {
+  Write-Log "swap failed: $($_.Exception.Message)"
   # Put everything back exactly as it was.
   Get-ChildItem -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -142,11 +159,13 @@ try {
     Move-Item -LiteralPath $_.FullName -Destination $InstallDir -Force
   }
   Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Log 'rolled back to the previous install'
   exit 1
 }
 
 Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $Staging -Recurse -Force -ErrorAction SilentlyContinue
+Write-Log 'update applied'
 
 if ($Relaunch) {
   Start-Process -FilePath $Exe
